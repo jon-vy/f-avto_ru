@@ -6,7 +6,10 @@ from bs4 import BeautifulSoup
 import lxml
 import re
 import math
-
+import datetime
+from xml.dom import minidom
+from value import link_list
+import time
 
 
 def get_pagin(url):
@@ -21,13 +24,13 @@ def get_pagin(url):
     find = p.strip().split()[1]
     pag = int(find)/20
     pagination = math.ceil(pag)
-    print(f"найдено страниц {pagination}")
+    print(f"{url} найдено страниц {pagination}")
     return pagination
     # print(soup)
 
 
 async def get_date(url, pag):
-    print(f"Работаю с {url}?page={pag}")
+
     headers = {
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
         "User-Agent": generate_user_agent()
@@ -36,78 +39,203 @@ async def get_date(url, pag):
         "page": pag
     }
     async with aiohttp.ClientSession() as session:
+        await asyncio.sleep(3)
         async with session.get(url=url, headers=headers, params=params) as r:
             html_cod = await r.text()
             soup = BeautifulSoup(html_cod, "lxml")
             card_block = soup.find_all("div", class_="card-block")
+            print(f"Работаю с {url}?page={pag}")
             for card in card_block:
                 link_item = f"https://f-avto.ru{card.find('a').get('href')}"
-                title = card.find("a").find('span', class_='text-uppercase').text
-                price = card.find('span', class_='font-weight-bold').text.strip()
-
-                small = card.find("a").find_all('small')
-                description = ""
-                for descr in small:
-                    description = f"{description}{' '.join(descr.text.split())}"
-
-                params_item = []
-
-                params_d_none = card.find('div', class_='d-none').find_all('div', class_='row')
-                for param in params_d_none:
-                    params_item.append(' '.join(param.text.split()))
+                print(link_item)
+                pars(link_item)
+                # link_list.append(link_item)
 
 
 
-
-                print(f"{title}\n{link_item}\n{description}\nЦена {price}\nПараметры\n{params_item}")
-                print("1")
-
-
-
-
-
-
-async def gather_get_urls():
+async def gather_get_date():
     urls_category = [
         "https://f-avto.ru/engine",
         "https://f-avto.ru/transmissiya/kpp/avtomaticheskie",
-        "https://f-avto.ru/transmissiya/kpp/mekhanicheskie"
+        "https://f-avto.ru/transmissiya/kpp/mekhanicheskie",
+        "https://f-avto.ru/transmissiya/kpp/razdatochnaye-korobki",
+        "https://f-avto.ru/toplivnaya-sistema/tnvd",
+        "https://f-avto.ru/zapchasti-dlya-dvigatelya/sistema-turbonadduva/turbiny",
+        "https://f-avto.ru/transmissiya/mosty/zadnie/zadnie-mosty",
+        "https://f-avto.ru/transmissiya/mosty/zadnie/reduktory-zadnego-mosta",
+        "https://f-avto.ru/transmissiya/mosty/perednie/reduktory-perednego-mosta"
     ]
-    pagination = get_pagin(urls_category[0])
-    tasks = []  # список задач
-    for pag in range(1, 2):  # int(pagination)
-        task = asyncio.create_task(get_date(urls_category[0], pag))  # создал задачу
-        tasks.append(task)  # добавил её в список
+    for url in urls_category:  # [1:2]
+        pagination = get_pagin(url)
+        tasks = []  # список задач
+        for pag in range(1, int(pagination)):  #
+            task = asyncio.create_task(get_date(url, pag))  # создал задачу
+            tasks.append(task)  # добавил её в список
+        await asyncio.gather(*tasks)
+
+async def gather_parser():
+    tasks = []
+    for link_item in link_list:
+        task = asyncio.create_task(parser(link_item))
+        tasks.append(task)
     await asyncio.gather(*tasks)
-#
-#
-#
-# async def pars():
-#     headers = {
-#         "accept": "application/json, text/javascript, */*; q=0.01",
-#         "User-Agent": generate_user_agent()
-#         # "Cookie": "PHPSESSID=d9ir96fbsocha8p50f3obvcnb3; _ga_BBR7SD9FKY=GS1.1.1650973583.1.1.1650974555.0; _ga=GA1.1.810880577.1650973584"
-#     }
-#
-#     r = requests.get(url=urls[1], headers=headers)
-#     count_item = r.text
-#     return count_item
-#     # print(html_cod)
+
+
+
+def pars(link_item):
+    print(f"начал парс {link_item}")
+    headers = {
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+        "User-Agent": generate_user_agent()
+    }
+    r = requests.get(url=link_item, headers=headers)
+    html_cod = r.text
+    soup = BeautifulSoup(html_cod, "lxml")
+    try:
+        card_item = soup.find('div', id='goods_info')
+
+        try:
+            prise = card_item.find('span', class_='goods_price').text.strip()
+        except:
+            return
+
+        title = card_item.find('h1').text.strip()
+
+        try:
+            description = card_item.find('td', colspan='2').text.strip()
+        except:
+            description = "None"
+
+        goods_info = card_item.find('table', class_='goods_info').find_all('tr')
+
+        specifications = {}
+        for info in goods_info:
+            try:
+                key = info.find('th').text
+                val = info.find('td').text
+                specifications[key] = val
+            except:
+                pass
+
+        img_source = soup.find('div', id='goods_img').find_all('a')
+        img_1_dict = {}
+        img_list_1 = []
+        img_list_2 = []
+        img_list_3 = []
+        for img in img_source:
+            url_i = img.get('style')
+            url_img = re.search('(?<=\().*?(?=\))', url_i).group().replace('d.jpg', '.jpg')
+            chek = url_img.split('/')[4]
+            if chek == "detail":
+                img_list_1.append(url_img)
+            elif chek == "endoscope":
+                img_list_2.append(url_img)
+            elif chek == "lot":
+                img_list_3.append(url_img)
+        img_1_dict["Фото"] = img_list_1
+        img_1_dict["Фото эндоскопом"] = img_list_2
+        img_1_dict["Фото до разборки"] = img_list_3
+        try:
+            video = soup.find('div', id='goods_video').find('iframe').get('src')
+        except:
+            pass
+
+        articul = soup.find('td', class_='goods_label').find('b').text
+    except:
+        print(f"ошибка здесь {link_item}")
+        return
+    print(f"закончил парс {link_item}")
+
+
+
+async def parser(link_item):
+    print(f"начал парс {link_item}")
+    headers = {
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+        "User-Agent": generate_user_agent()
+    }
+    # async with aiohttp.ClientSession() as session:
+    # async with aiohttp.ClientSession()
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=200), trust_env=True) as session:
+
+        await asyncio.sleep(3)
+        async with session.get(url=link_item, headers=headers) as r:
+            html_cod = await r.text()
+            soup = BeautifulSoup(html_cod, "lxml")
+            try:
+                card_item = soup.find('div', id='goods_info')
+
+                try:
+                    prise = card_item.find('span', class_='goods_price').text.strip()
+                except:
+                    return
+
+                title = card_item.find('h1').text.strip()
+
+                try:
+                    description = card_item.find('td', colspan='2').text.strip()
+                except:
+                    description = "None"
+
+                goods_info = card_item.find('table', class_='goods_info').find_all('tr')
+
+                specifications = {}
+                for info in goods_info:
+                    try:
+                        key = info.find('th').text
+                        val = info.find('td').text
+                        specifications[key] = val
+                    except:
+                        pass
+
+                img_source = soup.find('div', id='goods_img').find_all('a')
+                img_1_dict = {}
+                img_list_1 = []
+                img_list_2 = []
+                img_list_3 = []
+                for img in img_source:
+                    url_i = img.get('style')
+                    url_img = re.search('(?<=\().*?(?=\))', url_i).group().replace('d.jpg', '.jpg')
+                    chek = url_img.split('/')[4]
+                    if chek == "detail":
+                        img_list_1.append(url_img)
+                    elif chek == "endoscope":
+                        img_list_2.append(url_img)
+                    elif chek == "lot":
+                        img_list_3.append(url_img)
+                img_1_dict["Фото"] = img_list_1
+                img_1_dict["Фото эндоскопом"] = img_list_2
+                img_1_dict["Фото до разборки"] = img_list_3
+                try:
+                    video = soup.find('div', id='goods_video').find('iframe').get('src')
+                except:
+                    pass
+
+                articul = soup.find('td', class_='goods_label').find('b').text
+            except:
+                print(f"ошибка здесь {link_item}")
+                return
+    print(f"закончил парс {link_item}")
 
 
 
 def main():
-    asyncio.get_event_loop().run_until_complete(gather_get_urls())
+    asyncio.get_event_loop().run_until_complete(gather_get_date())
+    # asyncio.get_event_loop().run_until_complete(gather_parser())
+
+    # get_date_s(driver)
 
 
 
-# Press the green button in the gutter to run the script.
+
 if __name__ == '__main__':
-
-    urls_category = [
-        "https://f-avto.ru/engine",
-        "https://f-avto.ru/transmissiya/kpp"
-    ]
+    start_time = time.time()
+    print("Начат сбор ссылок на товары")
     main()
-    # get_pagin(urls_category[0])
+    # get_date_s(driver)
+    print("Сбор ссылок закончен")
+    print(f"собрано {len(link_list)} ссылок")
+    end_time = time.time()
+    total_time = end_time - start_time
+    print(f"затрачено на сбор ссылок {total_time}")
 
