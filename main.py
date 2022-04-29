@@ -59,7 +59,7 @@ async def get_date(url, pag, semaphore):
 
 
 async def gather_get_date():
-    semaphore = Semaphore(20)
+    semaphore = Semaphore(30)
     urls_category = [
         "https://f-avto.ru/engine",
         "https://f-avto.ru/transmissiya/kpp/avtomaticheskie",
@@ -71,7 +71,7 @@ async def gather_get_date():
         "https://f-avto.ru/transmissiya/mosty/zadnie/reduktory-zadnego-mosta",
         "https://f-avto.ru/transmissiya/mosty/perednie/reduktory-perednego-mosta"
     ]
-    for url in urls_category:  #[3:4]
+    for url in urls_category:  #[3:4][8:9]
         pagination = get_pagin(url)
 
         tasks = []  # список задач
@@ -83,84 +83,14 @@ async def gather_get_date():
 
 
 async def gather_parser(root, offers):
-    # queue = asyncio.Queue()
-    semaphore = Semaphore(20)
+    semaphore = Semaphore(30)
 
     tasks = []
     for link_item in link_list:
         # print(f"Создал задачу с ссылкой {link_item}")
         task = asyncio.create_task(parser(link_item, root, offers, semaphore))
         tasks.append(task)
-    # await queue.join()
     await asyncio.gather(*tasks)
-
-
-
-def pars(link_item):
-    # print(f"начал парс {link_item}")
-    headers = {
-        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-        "User-Agent": generate_user_agent()
-    }
-    r = requests.get(url=link_item, headers=headers)
-    html_cod = r.text
-    soup = BeautifulSoup(html_cod, "lxml")
-    try:
-        card_item = soup.find('div', id='goods_info')
-
-        try:
-            prise = card_item.find('span', class_='goods_price').text.strip()
-        except:
-            return
-
-        title = card_item.find('h1').text.strip()
-
-        try:
-            description = card_item.find('td', colspan='2').text.strip()
-        except:
-            description = "None"
-
-        goods_info = card_item.find('table', class_='goods_info').find_all('tr')
-
-        specifications = {}
-        for info in goods_info:
-            try:
-                key = info.find('th').text
-                val = info.find('td').text
-                specifications[key] = val
-            except:
-                pass
-
-        img_source = soup.find('div', id='goods_img').find_all('a')
-        img_1_dict = {}
-        img_list_1 = []
-        img_list_2 = []
-        img_list_3 = []
-        for img in img_source:
-            url_i = img.get('style')
-            url_img = re.search('(?<=\().*?(?=\))', url_i).group().replace('d.jpg', '.jpg')
-            chek = url_img.split('/')[4]
-            if chek == "detail":
-                img_list_1.append(url_img)
-            elif chek == "endoscope":
-                img_list_2.append(url_img)
-            elif chek == "lot":
-                img_list_3.append(url_img)
-        img_1_dict["Фото"] = img_list_1
-        img_1_dict["Фото эндоскопом"] = img_list_2
-        img_1_dict["Фото до разборки"] = img_list_3
-        try:
-            video = soup.find('div', id='goods_video').find('iframe').get('src')
-        except:
-            pass
-
-        articul = soup.find('td', class_='goods_label').find('b').text
-    except:
-        print(f"ошибка здесь {link_item}")
-        return
-    print(f"{link_item} | {title}")
-    # print(f"Обработал {link_item} | {title}")
-
 
 
 async def parser(link_item, root, offers, semaphore):
@@ -285,16 +215,16 @@ async def parser(link_item, root, offers, semaphore):
 
             for info in goods_info:
                 try:
-                    key = info.find('th').text
-                    # key_tr = translit(key, language_code='ru', reversed=True).replace(' ', '_')
+                    key = info.find('th').text.replace(' ', '_').strip()
+                    # key_tr = translit(key, language_code='ru', reversed=True)
 
                     if key == "Комплектность":
                         tr_compl = card_item.find('tr', id='tr_compl').find_all('div')
                         val = ""
                         for i in tr_compl:
-                            val = f"{val}{i.text}. "
+                            val = f"{val}{i.text.strip()}. "
                     else:
-                        val = info.find('td').text
+                        val = info.find('td').text.strip()
 
                     specificationsItem = root.createElement(f'{key}')  # Создал тег
                     offer.appendChild(specificationsItem)  # Привязал тег
@@ -409,5 +339,9 @@ if __name__ == '__main__':
     main()
     end_time = time.time()
     total_time = end_time - start_time
-    print(f"Затрачено времени {total_time}")
+    print(f"Затрачено времени {total_time} сек {total_time/60} мин")
+
+    # Semaphore(15) Затрачено времени 2502.2302343845367
+    # Semaphore(20) Затрачено времени 1393.2855863571167 сек 23.221426439285278 мин
+    # Semaphore(30) Затрачено времени 1073.0353374481201 сек 17.883922290802 мин
 
