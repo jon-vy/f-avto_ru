@@ -121,7 +121,7 @@ picture.appendChild(picture_text)
 
 
 xml_str = root.toprettyxml(indent="\t")
-save_path_file = "yandex_1.xml.xml"
+save_path_file = "yandex_1.xml"
 with open(save_path_file, "w", encoding="utf-8") as f:
     f.write(xml_str)
 

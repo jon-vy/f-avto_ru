@@ -24,7 +24,7 @@ def get_pagin(url):
     find = p.strip().split()[1]
     pag = int(find)/20
     pagination = math.ceil(pag)
-    print(f"{url} найдено ссылок {find}")
+    # print(f"{url} найдено ссылок {find}")
     return pagination
     # print(soup)
 
@@ -46,10 +46,14 @@ async def get_date(url, pag):
             card_block = soup.find_all("div", class_="card-block")
             # print(f"Работаю с {url}?page={pag}")
             for card in card_block:
-                link_item = f"https://f-avto.ru{card.find('a').get('href')}"
-                # print(link_item)
-                # pars(link_item)
-                link_list.append(link_item)
+                try:
+                    price = card.find('span', class_='font-weight-bold').text
+                    link_item = f"https://f-avto.ru{card.find('a').get('href')}"
+                    print(f"{link_item}")
+                    link_list.append(link_item)
+                except:
+                    pass
+
 
 async def gather_get_date():
     urls_category = [
@@ -63,8 +67,9 @@ async def gather_get_date():
         "https://f-avto.ru/transmissiya/mosty/zadnie/reduktory-zadnego-mosta",
         "https://f-avto.ru/transmissiya/mosty/perednie/reduktory-perednego-mosta"
     ]
-    for url in urls_category:  # [1:2]
+    for url in urls_category[3:4]:  #
         pagination = get_pagin(url)
+
         tasks = []  # список задач
         for pag in range(1, int(pagination)):  #
             task = asyncio.create_task(get_date(url, pag))  # создал задачу
@@ -73,14 +78,16 @@ async def gather_get_date():
 # Собираю ссылки с категорий
 
 
-async def gather_parser():
-    queue = asyncio.Queue()
+async def gather_parser(root, offers):
+    # queue = asyncio.Queue()
+
     tasks = []
     for link_item in link_list:
-        task = asyncio.create_task(parser(link_item, queue))
+        print(f"Создал задачу с ссылкой {link_item}")
+        task = asyncio.create_task(parser(link_item, root, offers))
         tasks.append(task)
-    await queue.join()
-    await asyncio.gather(*tasks, return_exceptions=True)
+    # await queue.join()
+    await asyncio.gather(*tasks)
 
 
 
@@ -150,7 +157,7 @@ def pars(link_item):
 
 
 
-async def parser(link_item, queue: asyncio.Queue):
+async def parser(link_item, root, offers):
     # print(f"начал парс {link_item}")
     headers = {
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
@@ -170,9 +177,34 @@ async def parser(link_item, queue: asyncio.Queue):
                 try:
                     prise = card_item.find('span', class_='goods_price').text.strip()
                 except:
+                    print(f"Не нашёл цену {link_item}")
                     return
 
                 title = card_item.find('h1').text.strip()
+
+                cat = soup.find_all('span', itemprop='name')[-1].text
+                if cat.find("вигатель") != -1:
+                    category_id = "0"
+                elif cat.find("втоматическая") != -1:
+                    category_id = "1"
+                elif cat.find("еханическ") != -1:
+                    category_id = "2"
+                elif cat.find("ариатор") != -1:
+                    category_id = "3"
+                elif cat.find("аздаточн") != -1:
+                    category_id = "4"
+                elif cat.find("Редуктор переднего моста") != -1:
+                    category_id = "5"
+                elif cat.find("Редуктор задний") != -1:
+                    category_id = "6"
+                elif cat.find("Мост задний") != -1:
+                    category_id = "7"
+                elif cat.find("ТНВД") != -1:
+                    category_id = "8"
+                elif cat.find("урбин") != -1:
+                    category_id = "9"
+
+
 
                 try:
                     description = card_item.find('td', colspan='2').text.strip()
@@ -211,20 +243,155 @@ async def parser(link_item, queue: asyncio.Queue):
                 try:
                     video = soup.find('div', id='goods_video').find('iframe').get('src')
                 except:
-                    pass
+                    video = "none"
 
                 articul = soup.find('td', class_='goods_label').find('b').text
             except:
                 print(f"ошибка здесь {link_item}")
                 return
+
+            # <editor-fold desc="Заполнение xml">
+            offer = root.createElement('offer')
+            offers.appendChild(offer)
+            offer.setAttribute('id', f'{articul}')
+            offer.setAttribute('available', 'true')
+            # offer.setAttribute('group_id', 'id группы товара')
+
+            urlItem = root.createElement('url')
+            offer.appendChild(urlItem)
+            urlItem_text = root.createTextNode(f'{link_item}')
+            urlItem.appendChild(urlItem_text)
+
+            priceItem = root.createElement('price')
+            offer.appendChild(priceItem)
+            priceItem_text = root.createTextNode(f'{prise}')
+            priceItem.appendChild(priceItem_text)
+
+            currencyId = root.createElement('currencyId')
+            offer.appendChild(currencyId)
+            currencyId_text = root.createTextNode('RUB')
+            currencyId.appendChild(currencyId_text)
+
+            titleItem = root.createElement('title')
+            offer.appendChild(titleItem)
+            title_text = root.createTextNode(f'{title}')
+            titleItem.appendChild(title_text)
+
+            categoryId = root.createElement('categoryId')
+            offer.appendChild(categoryId)
+            categoryId_text = root.createTextNode(f'{category_id}')
+            categoryId.appendChild(categoryId_text)
+
+            descriptionItem = root.createElement('description')
+            offer.appendChild(descriptionItem)
+            descriptionItem_text = root.createTextNode(f'{description}')
+            descriptionItem.appendChild(descriptionItem_text)
+
+            specificationsItem = root.createElement('specifications')
+            offer.appendChild(specificationsItem)
+            specificationsItem_text = root.createTextNode(f'{str(specifications)}')
+            specificationsItem.appendChild(specificationsItem_text)
+
+            picture = root.createElement('picture')
+            offer.appendChild(picture)
+            picture_text = root.createTextNode(f'{str(img_1_dict)}')
+            picture.appendChild(picture_text)
+
+            video = root.createElement('video')
+            offer.appendChild(video)
+            video_text = root.createTextNode(f'{video}')
+            video.appendChild(video_text)
+            # </editor-fold>
+
+
+
+
+
+
+
+
     print(f"Обработал {link_item} | {title}")
 
 
 
 def main():
-    asyncio.get_event_loop().run_until_complete(gather_get_date())
-    asyncio.get_event_loop().run_until_complete(gather_parser())
+    print("Начат сбор ссылок на товары")
 
+    asyncio.get_event_loop().run_until_complete(gather_get_date())
+    print("Сбор ссылок закончен")
+    print(f"собрано {len(link_list)} ссылок")
+    print("Начинаю сбор данных о товаре")
+    # <editor-fold desc="xml начало">
+    today = datetime.datetime.today()
+    date = today.strftime("%Y-%m-%d %H:%M")
+
+    root = minidom.Document()  # основной элемент
+
+    xml_root = root.createElement('yml_catalog')  # создал элемент с именем yml_catalog
+    root.appendChild(xml_root)  # добавил его в качестве дочернего к root
+    xml_root.setAttribute('date', date)  # Записал данные в элемент xml_root
+
+    shop = root.createElement('shop')
+    xml_root.appendChild(shop)
+
+    name = root.createElement('name')
+    shop.appendChild(name)
+    text_name = root.createTextNode('f-avto.ru')
+    name.appendChild(text_name)
+
+    company = root.createElement('company')
+    shop.appendChild(company)
+    text_name = root.createTextNode('f-avto.ru')
+    company.appendChild(text_name)
+
+    url_company = root.createElement('url')
+    shop.appendChild(url_company)
+    text_name = root.createTextNode('https://f-avto.ru')
+    url_company.appendChild(text_name)
+
+    currencies = root.createElement('currencies')
+    shop.appendChild(currencies)
+
+    currency = root.createElement('currency')
+    currencies.appendChild(currency)
+    currency.setAttribute('id', 'RUB')
+    currency.setAttribute('rate', '1')
+
+    categories = root.createElement('categories')
+    shop.appendChild(categories)
+
+    category_list = [
+        "Двигатели",
+        "КПП - автомат",
+        "КПП - механика",
+        "КПП - вариатор",
+        "Раздаточные коробки",
+        "Редуктор передний",
+        "Редуктор задний",
+        "Мост задний",
+        "ТНВД",
+        "Турбины"
+    ]
+    for i, cat in enumerate(category_list):
+        # for cat in category_list:
+        category = root.createElement('category')
+        categories.appendChild(category)
+        category.setAttribute('id', f'{i}')
+        textCategory = root.createTextNode(cat)
+        category.appendChild(textCategory)
+
+    offers = root.createElement('offers')
+    shop.appendChild(offers)
+
+    # </editor-fold>
+    asyncio.get_event_loop().run_until_complete(gather_parser(root, offers))
+    # <editor-fold desc="Сохранение xml">
+    xml_str = root.toprettyxml(indent="\t")
+    save_path_file = "yandex.xml"
+    with open(save_path_file, "w", encoding="utf-8") as f:
+        f.write(xml_str)
+    # </editor-fold>
+    print("Работа закончена")
     # get_date_s(driver)
 
 
@@ -232,12 +399,8 @@ def main():
 
 if __name__ == '__main__':
     start_time = time.time()
-    print("Начат сбор ссылок на товары")
     main()
-    # get_date_s(driver)
-    print("Сбор ссылок закончен")
-    print(f"собрано {len(link_list)} ссылок")
     end_time = time.time()
     total_time = end_time - start_time
-    print(f"затрачено на сбор ссылок {total_time}")
+    print(f"Затрачено времени {total_time}")
 

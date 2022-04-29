@@ -12,7 +12,7 @@ headers = {
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
         "User-Agent": generate_user_agent()
     }
-url = "https://f-avto.ru/goods/d4766111"
+url = "https://f-avto.ru/goods/d4754413"
 
 r = requests.get(url=url, headers=headers)
 # r = requests.post(url=url, headers=headers, params=params)
