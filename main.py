@@ -10,6 +10,8 @@ import datetime
 from xml.dom import minidom
 from value import link_list
 import time
+from asyncio import Semaphore
+from transliterate import translit
 
 
 def get_pagin(url):
@@ -29,8 +31,8 @@ def get_pagin(url):
     # print(soup)
 
 # Собираю ссылки с категорий
-async def get_date(url, pag):
-
+async def get_date(url, pag, semaphore):
+    await semaphore.acquire()
     headers = {
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
         "User-Agent": generate_user_agent()
@@ -53,9 +55,11 @@ async def get_date(url, pag):
                     link_list.append(link_item)
                 except:
                     pass
+    semaphore.release()
 
 
 async def gather_get_date():
+    semaphore = Semaphore(20)
     urls_category = [
         "https://f-avto.ru/engine",
         "https://f-avto.ru/transmissiya/kpp/avtomaticheskie",
@@ -67,12 +71,12 @@ async def gather_get_date():
         "https://f-avto.ru/transmissiya/mosty/zadnie/reduktory-zadnego-mosta",
         "https://f-avto.ru/transmissiya/mosty/perednie/reduktory-perednego-mosta"
     ]
-    for url in urls_category[3:4]:  #
+    for url in urls_category:  #[3:4]
         pagination = get_pagin(url)
 
         tasks = []  # список задач
         for pag in range(1, int(pagination)):  #
-            task = asyncio.create_task(get_date(url, pag))  # создал задачу
+            task = asyncio.create_task(get_date(url, pag, semaphore))  # создал задачу
             tasks.append(task)  # добавил её в список
         await asyncio.gather(*tasks)
 # Собираю ссылки с категорий
@@ -80,11 +84,12 @@ async def gather_get_date():
 
 async def gather_parser(root, offers):
     # queue = asyncio.Queue()
+    semaphore = Semaphore(20)
 
     tasks = []
     for link_item in link_list:
-        print(f"Создал задачу с ссылкой {link_item}")
-        task = asyncio.create_task(parser(link_item, root, offers))
+        # print(f"Создал задачу с ссылкой {link_item}")
+        task = asyncio.create_task(parser(link_item, root, offers, semaphore))
         tasks.append(task)
     # await queue.join()
     await asyncio.gather(*tasks)
@@ -153,12 +158,14 @@ def pars(link_item):
     except:
         print(f"ошибка здесь {link_item}")
         return
-    print(f"Обработал {link_item} | {title}")
+    print(f"{link_item} | {title}")
+    # print(f"Обработал {link_item} | {title}")
 
 
 
-async def parser(link_item, root, offers):
+async def parser(link_item, root, offers, semaphore):
     # print(f"начал парс {link_item}")
+    await semaphore.acquire()
     headers = {
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
         "User-Agent": generate_user_agent()
@@ -187,8 +194,14 @@ async def parser(link_item, root, offers):
                     category_id = "0"
                 elif cat.find("втоматическая") != -1:
                     category_id = "1"
+
                 elif cat.find("еханическ") != -1:
                     category_id = "2"
+                elif cat.find("КПП 5ст") != -1:
+                    category_id = "2"
+                elif cat.find("КПП 6ст") != -1:
+                    category_id = "2"
+
                 elif cat.find("ариатор") != -1:
                     category_id = "3"
                 elif cat.find("аздаточн") != -1:
@@ -211,39 +224,19 @@ async def parser(link_item, root, offers):
                 except:
                     description = "None"
 
-                goods_info = card_item.find('table', class_='goods_info').find_all('tr')
 
-                specifications = {}
-                for info in goods_info:
-                    try:
-                        key = info.find('th').text
-                        val = info.find('td').text
-                        specifications[key] = val
-                    except:
-                        pass
 
                 img_source = soup.find('div', id='goods_img').find_all('a')
-                img_1_dict = {}
-                img_list_1 = []
-                img_list_2 = []
-                img_list_3 = []
+                url_pic = ""
                 for img in img_source:
-                    url_i = img.get('style')
-                    url_img = re.search('(?<=\().*?(?=\))', url_i).group().replace('d.jpg', '.jpg')
-                    chek = url_img.split('/')[4]
-                    if chek == "detail":
-                        img_list_1.append(url_img)
-                    elif chek == "endoscope":
-                        img_list_2.append(url_img)
-                    elif chek == "lot":
-                        img_list_3.append(url_img)
-                img_1_dict["Фото"] = img_list_1
-                img_1_dict["Фото эндоскопом"] = img_list_2
-                img_1_dict["Фото до разборки"] = img_list_3
+                    url = img.get('style')
+                    url_img = re.search('(?<=\().*?(?=\))', url).group().replace('d.jpg', '.jpg')
+                    url_pic = f"{url_pic}{url_img} | "
+
                 try:
-                    video = soup.find('div', id='goods_video').find('iframe').get('src')
+                    vid = soup.find('div', id='goods_video').find('iframe').get('src')
                 except:
-                    video = "none"
+                    vid = "None"
 
                 articul = soup.find('td', class_='goods_label').find('b').text
             except:
@@ -287,30 +280,44 @@ async def parser(link_item, root, offers):
             descriptionItem_text = root.createTextNode(f'{description}')
             descriptionItem.appendChild(descriptionItem_text)
 
-            specificationsItem = root.createElement('specifications')
-            offer.appendChild(specificationsItem)
-            specificationsItem_text = root.createTextNode(f'{str(specifications)}')
-            specificationsItem.appendChild(specificationsItem_text)
+
+            goods_info = card_item.find('table', class_='goods_info').find_all('tr')
+
+            for info in goods_info:
+                try:
+                    key = info.find('th').text
+                    # key_tr = translit(key, language_code='ru', reversed=True).replace(' ', '_')
+
+                    if key == "Комплектность":
+                        tr_compl = card_item.find('tr', id='tr_compl').find_all('div')
+                        val = ""
+                        for i in tr_compl:
+                            val = f"{val}{i.text}. "
+                    else:
+                        val = info.find('td').text
+
+                    specificationsItem = root.createElement(f'{key}')  # Создал тег
+                    offer.appendChild(specificationsItem)  # Привязал тег
+                    specificationsItem_text = root.createTextNode(f'{val}')  # Создал текст для тега
+                    specificationsItem.appendChild(specificationsItem_text)  # Добавил текст в тег
+                except:
+                    pass
+
+
 
             picture = root.createElement('picture')
             offer.appendChild(picture)
-            picture_text = root.createTextNode(f'{str(img_1_dict)}')
+            picture_text = root.createTextNode(f'{url_pic}')
             picture.appendChild(picture_text)
 
             video = root.createElement('video')
             offer.appendChild(video)
-            video_text = root.createTextNode(f'{video}')
+            video_text = root.createTextNode(f'{vid}')
             video.appendChild(video_text)
             # </editor-fold>
 
-
-
-
-
-
-
-
-    print(f"Обработал {link_item} | {title}")
+    print(f"{link_item} | {title}")
+    semaphore.release()
 
 
 

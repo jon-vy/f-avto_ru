@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 import lxml
 import re
 import math
+from transliterate import translit
 
 async def parser(link_item):
     # print(f"начал парс {link_item}")
@@ -72,33 +73,30 @@ async def parser(link_item):
                 for info in goods_info:
                     try:
                         key = info.find('th').text
-                        val = info.find('td').text
+                        # key_tr = translit(key, language_code='ru', reversed=True).replace(' ', '_')
+                        if key == "Комплектность":
+                            tr_compl = card_item.find('tr', id='tr_compl').find_all('div')
+                            val = ""
+                            for i in tr_compl:
+                                val = f"{val}{i.text}. "
+                        else:
+                            val = info.find('td').text
                         specifications[key] = val
                     except:
                         pass
 
                 img_source = soup.find('div', id='goods_img').find_all('a')
-                img_1_dict = {}
-                img_list_1 = []
-                img_list_2 = []
-                img_list_3 = []
+                url_pic = ""
                 for img in img_source:
-                    url_i = img.get('style')
-                    url_img = re.search('(?<=\().*?(?=\))', url_i).group().replace('d.jpg', '.jpg')
-                    chek = url_img.split('/')[4]
-                    if chek == "detail":
-                        img_list_1.append(url_img)
-                    elif chek == "endoscope":
-                        img_list_2.append(url_img)
-                    elif chek == "lot":
-                        img_list_3.append(url_img)
-                img_1_dict["Фото"] = img_list_1
-                img_1_dict["Фото эндоскопом"] = img_list_2
-                img_1_dict["Фото до разборки"] = img_list_3
+                    url = img.get('style')
+                    url_img = re.search('(?<=\().*?(?=\))', url).group().replace('d.jpg', '.jpg')
+                    url_pic = f"{url_pic}{url_img} | "
+
+
                 try:
-                    video = soup.find('div', id='goods_video').find('iframe').get('src')
+                    vid = soup.find('div', id='goods_video').find('iframe').get('src')
                 except:
-                    pass
+                    vid = ""
 
                 articul = soup.find('td', class_='goods_label').find('b').text
             except:
@@ -107,4 +105,4 @@ async def parser(link_item):
     print(f"Обработал {link_item} | {title}")
 
     print(html_cod)
-asyncio.run(parser("https://f-avto.ru/goods/d4754413"))
+asyncio.run(parser("https://f-avto.ru/goods/d3845399"))
