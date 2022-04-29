@@ -24,11 +24,11 @@ def get_pagin(url):
     find = p.strip().split()[1]
     pag = int(find)/20
     pagination = math.ceil(pag)
-    print(f"{url} найдено страниц {pagination}")
+    print(f"{url} найдено ссылок {find}")
     return pagination
     # print(soup)
 
-
+# Собираю ссылки с категорий
 async def get_date(url, pag):
 
     headers = {
@@ -44,14 +44,12 @@ async def get_date(url, pag):
             html_cod = await r.text()
             soup = BeautifulSoup(html_cod, "lxml")
             card_block = soup.find_all("div", class_="card-block")
-            print(f"Работаю с {url}?page={pag}")
+            # print(f"Работаю с {url}?page={pag}")
             for card in card_block:
                 link_item = f"https://f-avto.ru{card.find('a').get('href')}"
-                print(link_item)
-                pars(link_item)
-                # link_list.append(link_item)
-
-
+                # print(link_item)
+                # pars(link_item)
+                link_list.append(link_item)
 
 async def gather_get_date():
     urls_category = [
@@ -72,18 +70,22 @@ async def gather_get_date():
             task = asyncio.create_task(get_date(url, pag))  # создал задачу
             tasks.append(task)  # добавил её в список
         await asyncio.gather(*tasks)
+# Собираю ссылки с категорий
+
 
 async def gather_parser():
+    queue = asyncio.Queue()
     tasks = []
     for link_item in link_list:
-        task = asyncio.create_task(parser(link_item))
+        task = asyncio.create_task(parser(link_item, queue))
         tasks.append(task)
-    await asyncio.gather(*tasks)
+    await queue.join()
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 
 
 def pars(link_item):
-    print(f"начал парс {link_item}")
+    # print(f"начал парс {link_item}")
     headers = {
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
         "User-Agent": generate_user_agent()
@@ -144,12 +146,12 @@ def pars(link_item):
     except:
         print(f"ошибка здесь {link_item}")
         return
-    print(f"закончил парс {link_item}")
+    print(f"Обработал {link_item} | {title}")
 
 
 
-async def parser(link_item):
-    print(f"начал парс {link_item}")
+async def parser(link_item, queue: asyncio.Queue):
+    # print(f"начал парс {link_item}")
     headers = {
         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
         "User-Agent": generate_user_agent()
@@ -215,13 +217,13 @@ async def parser(link_item):
             except:
                 print(f"ошибка здесь {link_item}")
                 return
-    print(f"закончил парс {link_item}")
+    print(f"Обработал {link_item} | {title}")
 
 
 
 def main():
     asyncio.get_event_loop().run_until_complete(gather_get_date())
-    # asyncio.get_event_loop().run_until_complete(gather_parser())
+    asyncio.get_event_loop().run_until_complete(gather_parser())
 
     # get_date_s(driver)
 
