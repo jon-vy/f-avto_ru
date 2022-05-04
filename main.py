@@ -8,11 +8,11 @@ import re
 import math
 import datetime
 from xml.dom import minidom
-from value import link_list
 import time
 from asyncio import Semaphore
-from transliterate import translit
 
+
+link_list = []
 
 def get_pagin(url):
     headers = {
@@ -71,7 +71,7 @@ async def gather_get_date():
         "https://f-avto.ru/transmissiya/mosty/zadnie/reduktory-zadnego-mosta",
         "https://f-avto.ru/transmissiya/mosty/perednie/reduktory-perednego-mosta"
     ]
-    for url in urls_category:  #[3:4][8:9]
+    for url in urls_category:  #[8:9][3:4]
         pagination = get_pagin(url)
 
         tasks = []  # список задач
@@ -101,7 +101,6 @@ async def parser(link_item, root, offers, semaphore):
         "User-Agent": generate_user_agent()
     }
     # async with aiohttp.ClientSession() as session:
-    # async with aiohttp.ClientSession()
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=200), trust_env=True) as session:
 
         await asyncio.sleep(3)
@@ -118,11 +117,17 @@ async def parser(link_item, root, offers, semaphore):
                     return
 
                 title = card_item.find('h1').text.strip()
+                type_part = title.split(' на ')[0]
+                marka = title.split(' на ')[1].split(' ')[0]
+                model = title.split(' на ')[1].split(' ')[1]
+
 
                 cat = soup.find_all('span', itemprop='name')[-1].text
                 if cat.find("вигатель") != -1:
                     category_id = "0"
                 elif cat.find("втоматическая") != -1:
+                    category_id = "1"
+                elif cat.find("КПП-робот") != -1:
                     category_id = "1"
 
                 elif cat.find("еханическ") != -1:
@@ -145,6 +150,8 @@ async def parser(link_item, root, offers, semaphore):
                 elif cat.find("ТНВД") != -1:
                     category_id = "8"
                 elif cat.find("урбин") != -1:
+                    category_id = "9"
+                elif cat.find("урбокомпрессор") != -1:
                     category_id = "9"
 
 
@@ -199,6 +206,28 @@ async def parser(link_item, root, offers, semaphore):
             offer.appendChild(titleItem)
             title_text = root.createTextNode(f'{title}')
             titleItem.appendChild(title_text)
+
+            type_partItem = root.createElement('Тип_запчасти')
+            offer.appendChild(type_partItem)
+            type_part_text = root.createTextNode(f'{type_part}')
+            type_partItem.appendChild(type_part_text)
+
+            markaItem = root.createElement('Марка')
+            offer.appendChild(markaItem)
+            marka_text = root.createTextNode(f'{marka}')
+            markaItem.appendChild(marka_text)
+
+            # model = title.split(' на ')[1].split(' ')[1]
+            modelItem = root.createElement('Модель')
+            offer.appendChild(modelItem)
+            model_text = root.createTextNode(f'{model}')
+            modelItem.appendChild(model_text)
+
+
+
+
+
+
 
             categoryId = root.createElement('categoryId')
             offer.appendChild(categoryId)
